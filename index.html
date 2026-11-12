@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gate vs. erosão</title>
+<meta name="description" content="Um Stop hook do Claude Code que mede a erosão estrutural e bloqueia o fim do turno muda a curva de degradação do código? Experimento pré-registrado no SlopCodeBench.">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="data.js"></script>
+<style>
+:root{--bg:#fbfaf7;--fg:#1b1a17;--muted:#6b675f;--line:#e4e0d6;--card:#ffffff;--accent:#b4541f;
+  --N:#7a7570;--P:#2f6fb5;--G:#d4691e;--PG:#7b3fa0;--mono:ui-monospace,SFMono-Regular,Menlo,monospace}
+@media (prefers-color-scheme: dark){:root{--bg:#151412;--fg:#ece8df;--muted:#a09a8f;--line:#2c2a26;--card:#1e1c19;--accent:#e58a4a;--N:#9a948c;--P:#6fa3e3;--G:#f08a45;--PG:#b47fd6}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 Georgia,"Times New Roman",serif}
+a{color:var(--accent)}
+header{border-bottom:1px solid var(--line);padding:12px 16px;display:flex;flex-wrap:wrap;gap:8px 20px;align-items:baseline;font-family:system-ui,sans-serif;font-size:14px}
+header b{font-size:16px}
+header nav a{color:var(--fg);text-decoration:none;margin-right:14px}
+header nav a:hover{color:var(--accent)}
+main{max-width:980px;margin:0 auto;padding:0 16px 60px}
+.status{font-family:var(--mono);font-size:13px;color:var(--muted);margin:28px 0 10px}
+h1{font-size:clamp(28px,5vw,44px);line-height:1.1;margin:0 0 14px;font-weight:600}
+h2{font-size:24px;margin:52px 0 12px;padding-top:12px;border-top:1px solid var(--line)}
+h3{font-size:18px;margin:26px 0 8px}
+.lead{font-size:19px;max-width:48em;margin:0 0 18px}
+.btns a{display:inline-block;font-family:system-ui,sans-serif;font-size:14px;padding:8px 14px;border:1px solid var(--line);border-radius:6px;text-decoration:none;color:var(--fg);margin:0 8px 8px 0;background:var(--card)}
+.btns a.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin:22px 0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:16px 18px}
+.card .k{font-family:system-ui,sans-serif;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.card .v{font-size:30px;font-weight:600;line-height:1.1;font-family:system-ui,sans-serif}
+.card p{margin:8px 0 0;font-size:14px;color:var(--muted)}
+table{border-collapse:collapse;width:100%;font-family:system-ui,sans-serif;font-size:14px;margin:12px 0 6px}
+th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-weight:600;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:middle}
+.tabs{display:flex;gap:6px;margin:14px 0;font-family:system-ui,sans-serif;font-size:14px}
+.tabs button{background:var(--card);border:1px solid var(--line);color:var(--fg);padding:7px 14px;border-radius:6px;cursor:pointer}
+.tabs button.on{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.chart{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px;height:380px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.grid .cell{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px;height:190px}
+.cell .t{font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:4px}
+pre{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px 14px;overflow:auto;font-size:13px;font-family:var(--mono)}
+code{font-family:var(--mono);font-size:.92em}
+.note{font-size:14px;color:var(--muted)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:22px}
+footer{border-top:1px solid var(--line);margin-top:40px;padding:18px 16px;font-size:13px;color:var(--muted);font-family:system-ui,sans-serif;text-align:center}
+.pill{font-family:var(--mono);font-size:12px;padding:2px 7px;border:1px solid var(--line);border-radius:999px;color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <b>gate vs. erosão</b>
+  <nav><a href="#tldr">Resumo</a><a href="#medimos">O que medimos</a><a href="#resultados">Resultados</a><a href="#problemas">Por problema</a><a href="#desenho">Desenho</a><a href="#artefatos">Artefatos</a></nav>
+</header>
+<main>
+
+<p class="status">pré-registrado · 2 experimentos · 4 condições · 12 problemas · 1 491 checkpoints · SlopCodeBench v1.0 · scb-check 0.1.3</p>
+<h1>Verificar ou instruir? Um Stop hook contra a erosão estrutural em agentes de código</h1>
+<p class="lead">Agentes de programação degradam a estrutura do código quando estendem o próprio trabalho ao longo de vários checkpoints. O SlopCodeBench mostrou que prompts de qualidade baixam o nível inicial da erosão mas não a taxa de crescimento. Este experimento testa outra intervenção: um <em>Stop hook</em> do Claude Code que mede a erosão ao fim de cada turno e, acima de um limiar τ, impede o agente de encerrar e devolve a lista de funções responsáveis.</p>
+<p class="btns">
+  <a class="primary" href="#resultados">resultados →</a>
+  <a href="https://github.com/diego-augusto/mpes/blob/main/EXPERIMENT.md">pré-registro</a>
+  <a href="https://github.com/diego-augusto/mpes/blob/main/docker/gate.py">gate.py</a>
+  <a href="https://github.com/diego-augusto/mpes">repositório</a>
+  <a href="https://arxiv.org/abs/2603.24755">SlopCodeBench (arXiv)</a>
+</p>
+
+<h2 id="tldr">Resumo</h2>
+<div class="cards">
+  <div class="card"><div class="k">Experimento 1 · MiniMax M2.7</div><div class="v">−0,18</div><p>logit(erosão) por checkpoint, gate − prompt, IC 95% [−0,25; −0,11]. O gate freia a trajetória; o prompt só melhora o ponto de partida. Correção não cai (+3,8 pp). H1 sustentada.</p></div>
+  <div class="card"><div class="k">Experimento 2 · Opus 4.7 high</div><div class="v">+0,005</div><p>mesma diferença de inclinação, IC [−0,11; +0,12]. As curvas sobem na mesma velocidade; o que muda é o nível: P &lt; G &lt; N, com 3,0 logit entre N e P. H1 não sustentada.</p></div>
+  <div class="card"><div class="k">Experimento 2b · prompt + gate (Opus)</div><div class="v">−0,42</div><p>nível PG − P, IC [−0,87; +0,03]. O gate nunca bloqueou sobre o código do prompt (0 de 213 checkpoints). Quando o modelo obedece ao prompt, o gate não acrescenta.</p></div>
+</div>
+<p>Leitura conjunta: a verificação no laço de execução faz o que a instrução não faz <strong>quando o modelo não obedece à instrução</strong>. Com um modelo que obedece, o prompt basta e o gate, com τ calibrado na mediana do baseline, fica inativo.</p>
+
+<h2 id="medimos">O que medimos</h2>
+<div class="two">
+<div>
+<h3>Erosão estrutural</h3>
+<p>Métrica do SlopCodeBench, calculada pelo <code>scb-check</code> 0.1.3 sobre o snapshot ao fim de cada checkpoint. Cada função tem massa de complexidade <code>CC × √sloc</code>; a erosão é a fração dessa massa concentrada em funções com complexidade ciclomática acima de 10.</p>
+<p>0 = nenhuma função complexa; 1 = toda a complexidade em funções complexas. A variável analisada é <code>y = logit(erosão)</code> e o desfecho primário é a <strong>inclinação</strong> de y por checkpoint: quanto o código erode por etapa.</p>
+<h3>Modelo estatístico</h3>
+<p><code>y ~ idx × braço + (1 + idx | problema) + (1 | run)</code>, braço com P de referência. O coeficiente <code>idx:G</code> é a diferença de inclinação G − P (contraste primário). Sensibilidades pré-registradas: ε do logit, limiar de CC 8/10/12, bootstrap por problema, Holm.</p>
+</div>
+<div>
+<h3>O gate</h3>
+<p>Um script de 105 linhas registrado como <code>hooks.Stop</code> no <code>settings.json</code> do agente. A cada tentativa de encerrar o turno ele roda o <code>scb-check</code> no workspace e:</p>
+<ul>
+<li>se <code>erosão ≤ τ</code>, libera (<code>exit 0</code>);</li>
+<li>se <code>erosão &gt; τ</code>, bloqueia (<code>exit 2</code>) e devolve ao agente a contagem e a lista das funções com CC &gt; 10, com instrução de refatorar;</li>
+<li>no máximo K = 2 bloqueios por checkpoint, depois libera.</li>
+</ul>
+<p>τ é a mediana da erosão do braço N no piloto do mesmo modelo: 0,7764 no MiniMax, 0,7923 no Opus. Entre N e G o único delta é a chave <code>hooks.Stop</code>; entre N e P, o arquivo de prompt.</p>
+<pre>{"hooks": {"Stop": [{"hooks": [{"type": "command",
+  "command": "python3 /opt/gate/gate.py", "timeout": 120}]}]}}</pre>
+</div>
+</div>
+
+<h2 id="resultados">Resultados</h2>
+<div class="tabs" id="exp-tabs">
+  <button data-exp="minimax" class="on">Experimento 1 · MiniMax M2.7</button>
+  <button data-exp="opus">Experimentos 2 e 2b · Opus 4.7 high</button>
+</div>
+<h3 id="res-title">Erosão média por checkpoint</h3>
+<div class="chart"><canvas id="main-chart"></canvas></div>
+<p class="note">Média da erosão dos 12 problemas × 3 repetições em cada checkpoint (os problemas têm de 4 a 8 checkpoints, então os últimos pontos têm menos observações). Passe o mouse para ver n e taxa de resolução.</p>
+
+<h3>Totais por condição</h3>
+<table id="totals"></table>
+
+<div id="res-minimax">
+<h3>Contrastes pré-registrados (inclinação, logit por checkpoint)</h3>
+<table>
+<tr><th>Contraste</th><th class="num">Estimativa</th><th class="num">IC 95%</th><th class="num">p (unilateral, Holm)</th><th>Leitura</th></tr>
+<tr><td><b>G − P</b> (primário)</td><td class="num">−0,179</td><td class="num">[−0,253; −0,105]</td><td class="num">&lt; 0,001</td><td>o gate freia mais que o prompt</td></tr>
+<tr><td>G − N</td><td class="num">−0,122</td><td class="num">[−0,197; −0,048]</td><td class="num">0,001</td><td>o gate muda a curva do baseline</td></tr>
+<tr><td>N − P</td><td class="num">−0,057</td><td class="num">[−0,131; +0,018]</td><td class="num">0,067</td><td>o prompt não reduz a inclinação de forma detectável</td></tr>
+</table>
+<p class="note">Inclinação de P: +0,345 logit/checkpoint. Correção (fração de checkpoints com 100% dos testes core): G − P = +3,8 pp [−3,0; +10,8], não-inferior. Custo: G/P = 1,08. Verbosidade e linhas de código são as menores em G (sem deslocamento de métrica). Resultado estável sob ε ∈ {0,005; 0,02}, CC &gt; {8, 12} e bootstrap por problema.</p>
+<h3>O tratamento foi aplicado?</h3>
+<p>Cobertura do gate: 86% dos checkpoints com pelo menos um Stop (nos 14% restantes o modelo estourou 100 turnos e o hook não disparou). 211 Stops, 40 bloqueios em 36 checkpoints. Em 24 de 24 checkpoints bloqueados com Stop seguinte, a erosão caiu dentro do turno (queda média 0,30).</p>
+</div>
+
+<div id="res-opus" hidden>
+<h3>Contrastes pré-registrados (experimento 2, três braços)</h3>
+<table>
+<tr><th>Contraste</th><th class="num">Inclinação</th><th class="num">IC 95%</th><th class="num">Nível (logit)</th><th class="num">IC 95%</th></tr>
+<tr><td><b>G − P</b> (primário)</td><td class="num">+0,005</td><td class="num">[−0,108; +0,118]</td><td class="num">+1,083</td><td class="num">[+0,670; +1,496]</td></tr>
+<tr><td>G − N</td><td class="num">−0,003</td><td class="num">[−0,116; +0,110]</td><td class="num">−1,951</td><td class="num">[−2,364; −1,538]</td></tr>
+<tr><td>N − P</td><td class="num">+0,008</td><td class="num">[−0,105; +0,121]</td><td class="num">+3,034</td><td class="num">[+2,621; +3,447]</td></tr>
+</table>
+<p class="note">Inclinação de P: +0,174 logit/checkpoint. Nenhum contraste de inclinação exclui zero; todos os de nível excluem (p Holm &lt; 0,001). Correção: G − P = 0,0 pp [−8,1; +6,8], não-inferior. Custo-equivalente: G/P = 0,88. Gate em G: cobertura 98,6%, 246 Stops, 33 bloqueios; a erosão caiu dentro do turno em 32 de 32 checkpoints bloqueados (queda média 0,75).</p>
+<h3>Experimento 2b: prompt + gate (PG)</h3>
+<table>
+<tr><th>Contraste</th><th class="num">Inclinação</th><th class="num">IC 95%</th><th class="num">Nível (logit)</th><th class="num">IC 95%</th><th>Leitura pré-registrada</th></tr>
+<tr><td><b>PG − P</b></td><td class="num">+0,064</td><td class="num">[−0,044; +0,172]</td><td class="num">−0,422</td><td class="num">[−0,870; +0,027]</td><td>IC inclui zero: o gate não acrescenta ao prompt</td></tr>
+<tr><td>PG − G</td><td class="num">+0,056</td><td class="num">[−0,052; +0,164]</td><td class="num">−1,508</td><td class="num">[−1,956; −1,059]</td><td>o prompt acrescenta ao gate</td></tr>
+</table>
+<p class="note">Gate em PG: 212 de 213 checkpoints com Stop, <strong>0 bloqueios</strong>: a erosão medida no Stop nunca passou de τ = 0,79 (máximo 0,54). Com o prompt, o código fica abaixo do limiar e o gate vira observador.</p>
+</div>
+
+<h3>Checagem com Sonnet 4.6</h3>
+<p>P e G em <code>forge</code> e <code>log_query</code>, 1 repetição, τ do MiniMax. O hook disparou em 13 de 13 checkpoints; houve um único bloqueio, em <code>forge</code> checkpoint 8: erosão 0,81 (10 funções com CC &gt; 10) → 0,00 no mesmo turno, com todos os testes core passando e verbosidade caindo. Prova de existência de que um modelo capaz reage ao feedback por completo, não medida.</p>
+
+<h2 id="problemas">Por problema</h2>
+<div class="tabs" id="prob-tabs">
+  <button data-exp="minimax" class="on">MiniMax</button>
+  <button data-exp="opus">Opus</button>
+</div>
+<div class="grid" id="prob-grid"></div>
+<p class="note">Erosão média das 3 repetições por checkpoint, uma curva por condição. Eixo y de 0 a 1 em todos os painéis.</p>
+
+<h2 id="desenho">Desenho</h2>
+<h3>Condições</h3>
+<table>
+<tr><th>Braço</th><th>Prompt</th><th>Hook</th><th>O que testa</th></tr>
+<tr><td><span class="sw" style="background:var(--N)"></span><b>N</b></td><td><code>just-solve</code></td><td>nenhum</td><td>baseline: como o agente erode sem intervenção</td></tr>
+<tr><td><span class="sw" style="background:var(--P)"></span><b>P</b></td><td><code>anti_slop</code> (do paper)</td><td>nenhum</td><td>intervenção por instrução</td></tr>
+<tr><td><span class="sw" style="background:var(--G)"></span><b>G</b></td><td><code>just-solve</code></td><td>Stop hook com <code>scb-check</code></td><td>intervenção por verificação, sem mudar o prompt</td></tr>
+<tr><td><span class="sw" style="background:var(--PG)"></span><b>PG</b></td><td><code>anti_slop</code></td><td>Stop hook</td><td>os efeitos somam? (só no Opus, experimento 2b)</td></tr>
+</table>
+<p>Experimento em blocos: cada par (problema, repetição) recebe todas as condições, em ordem de quadrado latino. 12 problemas × 3 repetições × 3 braços = 108 execuções e 639 checkpoints por experimento; PG acrescenta 213. Unidade experimental: a execução; unidade de medida: o checkpoint. Cada checkpoint é uma sessão nova do Claude Code; só o workspace persiste.</p>
+
+<h3>Problemas</h3>
+<p>12 dos 36 do catálogo v1.0, estratificados por número de checkpoints, com mais peso nos longos, onde a inclinação aparece melhor: 71 checkpoints por repetição.</p>
+<table>
+<tr><th>Checkpoints</th><th>Problemas</th></tr>
+<tr><td>4</td><td><code>file_backup</code>, <code>layered_config_synthesizer</code></td></tr>
+<tr><td>5</td><td><code>code_search</code>, <code>log_query</code>, <code>migrate_configs</code>, <code>database_migration</code></td></tr>
+<tr><td>6 a 7</td><td><code>cfgpipe</code>, <code>execution_server</code>, <code>sheeteval</code></td></tr>
+<tr><td>8</td><td><code>forge</code>, <code>circuit_eval</code>, <code>mocked_http</code></td></tr>
+</table>
+
+<h3>Versões fixadas</h3>
+<table>
+<tr><th>Item</th><th>Experimento 1</th><th>Experimentos 2 e 2b</th></tr>
+<tr><td>Modelo</td><td>MiniMax M2.7 via OpenRouter, thinking low</td><td>Claude Opus 4.7, thinking high, pela assinatura</td></tr>
+<tr><td>Claude Code</td><td>2.0.51</td><td>2.1.111 (linha do leaderboard scbench.ai)</td></tr>
+<tr><td>τ do gate</td><td>0,7764</td><td>0,7923</td></tr>
+<tr><td>Harness</td><td colspan="2"><code>slop-code-bench</code> @ 06b5c068; catálogo scb-problems v1.0 (4d38d30); <code>scb-check</code> 0.1.3; <code>step_limit</code> 100; <code>pass_policy</code> any</td></tr>
+<tr><td>Ambiente</td><td colspan="2">Docker <code>mpes-gate:py3.12</code>, mesma imagem em todos os braços; VM Hetzner CAX41 (aarch64)</td></tr>
+<tr><td>Custo</td><td>≈ US$ 157 nos três braços</td><td>US$ 0 (≈ US$ 1 630 a preço de API)</td></tr>
+</table>
+
+<h3>Ameaças à validade</h3>
+<ul>
+<li><strong>Goodhart.</strong> Gate e desfecho usam o mesmo <code>scb-check</code>. Por isso verbosidade, linhas de código e wrappers triviais são reportados junto; em nenhum experimento o gate deslocou a métrica. Um braço <em>sham</em> (bloqueio sem métrica) separaria feedback dirigido de turno extra e não foi rodado.</li>
+<li><strong>Cobertura.</strong> No MiniMax, 14% dos checkpoints estouraram o limite de turnos sem disparar o hook; o efeito medido é conservador. No Opus a cobertura foi 98,6%.</li>
+<li><strong>Generalização.</strong> 12 dos 36 problemas; dois modelos; τ fixo na mediana do baseline. No experimento 2b a ordem temporal (PG depois dos outros nove braço-reps) é uma ameaça registrada.</li>
+</ul>
+
+<h2 id="artefatos">Artefatos</h2>
+<ul>
+<li><a href="https://github.com/diego-augusto/mpes/blob/main/EXPERIMENT.md">EXPERIMENT.md</a>: pré-registro completo, pins, análise, regra de decisão e registro de execução dos três experimentos.</li>
+<li><a href="https://github.com/diego-augusto/mpes/blob/main/docker/gate.py">docker/gate.py</a> e <a href="https://github.com/diego-augusto/mpes/blob/main/configs/agent_gate_opus47.yaml">configs/agent_gate_opus47.yaml</a>: o hook e a configuração do agente.</li>
+<li><a href="https://github.com/diego-augusto/mpes/blob/main/analysis/slope.py">analysis/slope.py</a>: análise pré-registrada; <a href="https://github.com/diego-augusto/mpes/blob/main/results/summary.md">results/summary.md</a> e <a href="https://github.com/diego-augusto/mpes/blob/main/results/summary_opus.md">summary_opus.md</a>: saídas.</li>
+<li>Dados brutos (3,5 GB: snapshots, transcripts, avaliações, decisões do gate): release <a href="https://github.com/diego-augusto/mpes/releases/tag/data-2026-11-12">data-2026-11-12</a>.</li>
+<li>Harness e métricas: <a href="https://github.com/SprocketLab/slop-code-bench">SprocketLab/slop-code-bench</a>, <a href="https://www.scbench.ai/">scbench.ai</a>.</li>
+</ul>
+
+</main>
+<footer>Diego Moura · mestrado profissional em engenharia de software · 2026 · dados e código no <a href="https://github.com/diego-augusto/mpes">repositório</a></footer>
+
+<script>
+const COLORS = {N:getCSS('--N'), P:getCSS('--P'), G:getCSS('--G'), PG:getCSS('--PG')};
+const LABEL = {N:'N · normal', P:'P · prompt anti_slop', G:'G · gate', PG:'PG · prompt + gate'};
+const TITLE = {minimax:'Experimento 1 · MiniMax M2.7 · 639 checkpoints', opus:'Experimentos 2 e 2b · Opus 4.7 high · 852 checkpoints'};
+function getCSS(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim()}
+Chart.defaults.color = getCSS('--muted'); Chart.defaults.borderColor = getCSS('--line');
+Chart.defaults.font.family = 'system-ui, sans-serif';
+
+function series(exp, key){ // key = "arm" ou "problem/arm"
+  const d = DATA[exp]; const src = key ? d.by_problem : d.by_arm;
+  return d.arms.map(a => {
+    const pts = (src[key ? key + '/' + a : a] || []);
+    return {label: LABEL[a], borderColor: COLORS[a], backgroundColor: COLORS[a], borderWidth: 2, pointRadius: 2.5, tension: .2,
+            data: pts.map(p => ({x: p.idx, y: p.erosion, n: p.n, solved: p.solved}))};
+  });
+}
+const opts = (small) => ({responsive:true, maintainAspectRatio:false, parsing:false, animation:false,
+  scales:{x:{type:'linear', title:{display:!small, text:'checkpoint'}, ticks:{stepSize:1}, min:1, max:8},
+          y:{min:0, max:1, title:{display:!small, text:'erosão média'}, ticks:{display:!small}}},
+  plugins:{legend:{display:!small, position:'bottom'},
+    tooltip:{enabled:!small, callbacks:{label:c=>`${c.dataset.label}: ${c.parsed.y.toFixed(3)} (n=${c.raw.n}, resolvidos ${(c.raw.solved*100).toFixed(0)}%)`,
+                                        title:i=>'checkpoint '+i[0].parsed.x}}}});
+
+let mainChart, probCharts = [];
+function renderMain(exp){
+  document.getElementById('res-title').textContent = 'Erosão média por checkpoint · ' + TITLE[exp];
+  document.getElementById('res-minimax').hidden = exp !== 'minimax';
+  document.getElementById('res-opus').hidden = exp !== 'opus';
+  if (mainChart) mainChart.destroy();
+  mainChart = new Chart(document.getElementById('main-chart'), {type:'line', data:{datasets:series(exp)}, options:opts(false)});
+  const t = DATA[exp].totals; const cost = exp === 'opus' ? 'custo-equiv. US$' : 'custo US$';
+  document.getElementById('totals').innerHTML =
+    `<tr><th>Braço</th><th class="num">Checkpoints</th><th class="num">Erosão média</th><th class="num">Resolvidos</th><th class="num">${cost}</th><th class="num">LOC médio</th><th class="num">Stops</th><th class="num">Bloqueios</th><th class="num">Limite de turnos</th></tr>` +
+    DATA[exp].arms.map(a => { const r = t[a]; return `<tr><td><span class="sw" style="background:${COLORS[a]}"></span><b>${a}</b></td><td class="num">${r.ckpts}</td><td class="num">${r.erosion.toFixed(3)}</td><td class="num">${(r.solved*100).toFixed(1)}%</td><td class="num">${r.cost.toFixed(2)}</td><td class="num">${Math.round(r.loc)}</td><td class="num">${a.includes('G') ? r.stops : '·'}</td><td class="num">${a.includes('G') ? r.blocks : '·'}</td><td class="num">${r.max_turns}</td></tr>`; }).join('');
+}
+function renderProblems(exp){
+  probCharts.forEach(c => c.destroy()); probCharts = [];
+  const grid = document.getElementById('prob-grid'); grid.innerHTML = '';
+  for (const p of DATA[exp].problems){
+    const cell = document.createElement('div'); cell.className = 'cell';
+    cell.innerHTML = `<div class="t">${p}</div><div style="height:150px"><canvas></canvas></div>`;
+    grid.appendChild(cell);
+    probCharts.push(new Chart(cell.querySelector('canvas'), {type:'line', data:{datasets:series(exp, p)}, options:opts(true)}));
+  }
+}
+for (const [id, fn] of [['exp-tabs', renderMain], ['prob-tabs', renderProblems]]) {
+  const tabs = document.getElementById(id);
+  tabs.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return;
+    tabs.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); fn(b.dataset.exp); });
+}
+renderMain('minimax'); renderProblems('minimax');
+</script>
+</body>
+</html>
