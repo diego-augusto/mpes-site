@@ -3,259 +3,511 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gate vs. erosão</title>
-<meta name="description" content="Um Stop hook do Claude Code que mede a erosão estrutural e bloqueia o fim do turno muda a curva de degradação do código? Experimento pré-registrado no SlopCodeBench.">
+<title>Verificar ou instruir</title>
+<meta name="description" content="Um Stop hook que mede a erosão estrutural e bloqueia o fim do turno muda a curva de degradação do código produzido por agentes? Dois experimentos pré-registrados no SlopCodeBench, com dados interativos.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="data.js"></script>
 <style>
-:root{--bg:#fbfaf7;--fg:#1b1a17;--muted:#6b675f;--line:#e4e0d6;--card:#ffffff;--accent:#b4541f;
-  --N:#7a7570;--P:#2f6fb5;--G:#d4691e;--PG:#7b3fa0;--mono:ui-monospace,SFMono-Regular,Menlo,monospace}
-@media (prefers-color-scheme: dark){:root{--bg:#151412;--fg:#ece8df;--muted:#a09a8f;--line:#2c2a26;--card:#1e1c19;--accent:#e58a4a;--N:#9a948c;--P:#6fa3e3;--G:#f08a45;--PG:#b47fd6}}
+:root{
+  --bg:#fcfcfb; --ink:#1c1f22; --muted:#5f666d; --line:#dfe2e6; --panel:#f3f4f5; --mark:#1c1f22;
+  --N:#2f8f6f; --P:#2563eb; --G:#d9741a; --PG:#8b3fb5;
+  --serif:"Source Serif 4",Charter,"Iowan Old Style",Georgia,serif;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){--bg:#1a1a19;--ink:#e8e6e1;--muted:#a3a39c;--line:#34342f;--panel:#232321;--mark:#e8e6e1;--N:#35a07e;--P:#4f85ea;--G:#d07a24;--PG:#a86bcc}
+}
+:root[data-theme="dark"]{--bg:#1a1a19;--ink:#e8e6e1;--muted:#a3a39c;--line:#34342f;--panel:#232321;--mark:#e8e6e1;--N:#35a07e;--P:#4f85ea;--G:#d07a24;--PG:#a86bcc}
+
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 Georgia,"Times New Roman",serif}
-a{color:var(--accent)}
-header{border-bottom:1px solid var(--line);padding:12px 16px;display:flex;flex-wrap:wrap;gap:8px 20px;align-items:baseline;font-family:system-ui,sans-serif;font-size:14px}
-header b{font-size:16px}
-header nav a{color:var(--fg);text-decoration:none;margin-right:14px}
-header nav a:hover{color:var(--accent)}
-main{max-width:980px;margin:0 auto;padding:0 16px 60px}
-.status{font-family:var(--mono);font-size:13px;color:var(--muted);margin:28px 0 10px}
-h1{font-size:clamp(28px,5vw,44px);line-height:1.1;margin:0 0 14px;font-weight:600}
-h2{font-size:24px;margin:52px 0 12px;padding-top:12px;border-top:1px solid var(--line)}
-h3{font-size:18px;margin:26px 0 8px}
-.lead{font-size:19px;max-width:48em;margin:0 0 18px}
-.btns a{display:inline-block;font-family:system-ui,sans-serif;font-size:14px;padding:8px 14px;border:1px solid var(--line);border-radius:6px;text-decoration:none;color:var(--fg);margin:0 8px 8px 0;background:var(--card)}
-.btns a.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin:22px 0}
-.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:16px 18px}
-.card .k{font-family:system-ui,sans-serif;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
-.card .v{font-size:30px;font-weight:600;line-height:1.1;font-family:system-ui,sans-serif}
-.card p{margin:8px 0 0;font-size:14px;color:var(--muted)}
-table{border-collapse:collapse;width:100%;font-family:system-ui,sans-serif;font-size:14px;margin:12px 0 6px}
-th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
-th{font-weight:600;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
-td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
-.sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:middle}
-.tabs{display:flex;gap:6px;margin:14px 0;font-family:system-ui,sans-serif;font-size:14px}
-.tabs button{background:var(--card);border:1px solid var(--line);color:var(--fg);padding:7px 14px;border-radius:6px;cursor:pointer}
-.tabs button.on{background:var(--fg);color:var(--bg);border-color:var(--fg)}
-.chart{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px;height:380px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
-.grid .cell{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px;height:190px}
-.cell .t{font-family:var(--mono);font-size:12px;color:var(--muted);margin-bottom:4px}
-pre{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px 14px;overflow:auto;font-size:13px;font-family:var(--mono)}
-code{font-family:var(--mono);font-size:.92em}
-.note{font-size:14px;color:var(--muted)}
-.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:22px}
-footer{border-top:1px solid var(--line);margin-top:40px;padding:18px 16px;font-size:13px;color:var(--muted);font-family:system-ui,sans-serif;text-align:center}
-.pill{font-family:var(--mono);font-size:12px;padding:2px 7px;border:1px solid var(--line);border-radius:999px;color:var(--muted)}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--serif);font-size:18px;line-height:1.6;font-feature-settings:"onum" 0}
+body > *{min-width:0}
+
+/* barra de seções */
+.bar{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);font-family:var(--sans);font-size:14px}
+.bar ol{list-style:none;margin:0 auto;padding:0 16px;max-width:1040px;display:flex;gap:4px 22px;overflow-x:auto;white-space:nowrap;scrollbar-width:none}
+.bar ol::-webkit-scrollbar{display:none}
+.bar a{display:block;padding:12px 0;color:var(--muted);text-decoration:none;border-bottom:2px solid transparent}
+.bar a:hover,.bar a:focus-visible{color:var(--ink)}
+.bar a.on{color:var(--ink);border-color:var(--ink)}
+
+/* colunas: prosa estreita, figuras largas */
+.wrap{max-width:1040px;margin:0 auto;padding:0 16px}
+.prose{max-width:66ch}
+.wide{max-width:1040px}
+
+h1{font-family:var(--serif);font-weight:600;font-size:clamp(34px,5.4vw,56px);line-height:1.08;letter-spacing:-.015em;margin:56px 0 16px;max-width:22ch}
+h2{font-weight:600;font-size:30px;line-height:1.2;margin:80px 0 18px;letter-spacing:-.01em}
+h2 small{display:block;font-family:var(--sans);font-weight:500;font-size:14px;color:var(--muted);letter-spacing:0;margin-bottom:6px}
+h3{font-weight:600;font-size:21px;margin:40px 0 10px}
+p{margin:0 0 1.05em}
+.lead{font-size:22px;line-height:1.45;max-width:36em;color:var(--ink)}
+.lead + .lead{margin-top:-.2em}
+em{font-style:italic}
+strong{font-weight:600}
+ul,ol.steps{padding-left:1.2em}
+li{margin:.3em 0}
+.sub{font-family:var(--sans);font-size:15px;color:var(--muted);margin:0 0 28px}
+.sub span + span::before{content:" / ";color:var(--line)}
+
+code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+code{font-size:.88em;background:var(--panel);padding:.08em .35em;border-radius:3px}
+pre{background:var(--panel);padding:14px 16px;border-radius:4px;overflow:auto;font-size:14px;line-height:1.5;margin:14px 0 20px}
+pre code{background:none;padding:0;font-size:inherit}
+.formula{font-family:var(--serif);font-style:italic;font-size:20px;text-align:center;margin:18px 0 22px}
+.formula .frac{display:inline-flex;flex-direction:column;vertical-align:middle;text-align:center}
+.formula .frac span:first-child{border-bottom:1px solid var(--ink);padding:0 .3em}
+.formula .frac span:last-child{padding:0 .3em}
+
+/* tabelas */
+table{border-collapse:collapse;width:100%;font-family:var(--sans);font-size:15px;margin:14px 0 8px;font-variant-numeric:tabular-nums}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+thead th{font-weight:500;color:var(--muted);border-bottom:1px solid var(--ink)}
+td.n,th.n{text-align:right}
+td.main{font-weight:600}
+.cap{font-family:var(--sans);font-size:14px;color:var(--muted);line-height:1.5;margin:8px 0 0}
+.tablewrap{overflow-x:auto;margin:0 -16px;padding:0 16px}
+
+/* legenda de braços */
+.arm{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:-1px;margin-right:6px}
+.arm.N{background:var(--N)}.arm.P{background:var(--P)}.arm.G{background:var(--G)}.arm.PG{background:var(--PG)}
+
+/* figuras */
+figure{margin:28px 0 36px}
+figure .plot{height:400px;position:relative}
+figure.small .plot{height:300px}
+figcaption{font-family:var(--sans);font-size:14px;color:var(--muted);line-height:1.5;margin-top:10px;max-width:72ch}
+.controls{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;font-family:var(--sans);font-size:14px;margin:0 0 14px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.seg button{background:none;border:0;color:var(--muted);font:inherit;padding:7px 12px;cursor:pointer}
+.seg button + button{border-left:1px solid var(--line)}
+.seg button.on{background:var(--ink);color:var(--bg)}
+.seg button:focus-visible,.bar a:focus-visible,input:focus-visible{outline:2px solid var(--P);outline-offset:2px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-family:var(--sans);font-size:14px;color:var(--muted);margin:10px 0 0}
+.legend button{background:none;border:0;color:inherit;font:inherit;padding:0;cursor:pointer}
+.legend button.off{text-decoration:line-through;opacity:.55}
+
+/* explorador de τ */
+.tau{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:24px;align-items:start}
+@media (max-width:760px){.tau{grid-template-columns:1fr}}
+.tau .plot{height:340px}
+.tauside{font-family:var(--sans);font-size:15px}
+.tauside label{display:block;margin-bottom:8px}
+.tauside output{font-weight:600;font-variant-numeric:tabular-nums}
+.tauside input[type=range]{width:100%;accent-color:var(--ink)}
+.bars{margin:16px 0 0;padding:0;list-style:none}
+.bars li{display:grid;grid-template-columns:44px 1fr 52px;gap:10px;align-items:center;margin:8px 0;font-variant-numeric:tabular-nums}
+.bars .track{height:10px;background:var(--panel);border-radius:2px;overflow:hidden}
+.bars .fill{height:100%;border-radius:2px}
+.bars .pct{text-align:right}
+.tauside p{color:var(--muted);font-size:14px;margin-top:14px}
+
+/* pequenos múltiplos */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
+.grid .cell{border:1px solid var(--line);border-radius:4px;padding:10px 10px 6px}
+.cell .t{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:var(--muted);margin:0 0 4px}
+.cell .plot{height:150px}
+
+.aside{border-left:3px solid var(--line);padding:2px 0 2px 18px;margin:24px 0;color:var(--ink)}
+.aside p:last-child{margin-bottom:0}
+hr{border:0;border-top:1px solid var(--line);margin:64px 0}
+footer{font-family:var(--sans);font-size:14px;color:var(--muted);padding:40px 16px 56px;text-align:left}
+@media (max-width:600px){
+  body{font-size:17px} h2{margin-top:60px;font-size:26px} .lead{font-size:19px}
+  figure .plot{height:300px} .tau .plot{height:280px}
+}
 </style>
 </head>
 <body>
+
+<nav class="bar" aria-label="Seções"><ol>
+<li><a href="#problema">O problema</a></li>
+<li><a href="#medida">A medida</a></li>
+<li><a href="#gate">O gate</a></li>
+<li><a href="#desenho">Desenho</a></li>
+<li><a href="#exp1">Experimento 1</a></li>
+<li><a href="#exp2">Experimento 2</a></li>
+<li><a href="#goodhart">Goodhart</a></li>
+<li><a href="#conclusao">Conclusão</a></li>
+<li><a href="#reproducao">Reprodução</a></li>
+</ol></nav>
+
+<main class="wrap">
+
 <header>
-  <b>gate vs. erosão</b>
-  <nav><a href="#tldr">Resumo</a><a href="#medimos">O que medimos</a><a href="#resultados">Resultados</a><a href="#problemas">Por problema</a><a href="#desenho">Desenho</a><a href="#artefatos">Artefatos</a></nav>
-</header>
-<main>
-
-<p class="status">pré-registrado · 2 experimentos · 4 condições · 12 problemas · 1 491 checkpoints · SlopCodeBench v1.0 · scb-check 0.1.3</p>
 <h1>Verificar ou instruir? Um Stop hook contra a erosão estrutural em agentes de código</h1>
-<p class="lead">Agentes de programação degradam a estrutura do código quando estendem o próprio trabalho ao longo de vários checkpoints. O SlopCodeBench mostrou que prompts de qualidade baixam o nível inicial da erosão mas não a taxa de crescimento. Este experimento testa outra intervenção: um <em>Stop hook</em> do Claude Code que mede a erosão ao fim de cada turno e, acima de um limiar τ, impede o agente de encerrar e devolve a lista de funções responsáveis.</p>
-<p class="btns">
-  <a class="primary" href="#resultados">resultados →</a>
-  <a href="https://github.com/diego-augusto/mpes/blob/main/EXPERIMENT.md">pré-registro</a>
-  <a href="https://github.com/diego-augusto/mpes/blob/main/docker/gate.py">gate.py</a>
-  <a href="https://github.com/diego-augusto/mpes">repositório</a>
-  <a href="https://arxiv.org/abs/2603.24755">SlopCodeBench (arXiv)</a>
-</p>
-
-<h2 id="tldr">Resumo</h2>
-<div class="cards">
-  <div class="card"><div class="k">Experimento 1 · MiniMax M2.7</div><div class="v">−0,18</div><p>logit(erosão) por checkpoint, gate − prompt, IC 95% [−0,25; −0,11]. O gate freia a trajetória; o prompt só melhora o ponto de partida. Correção não cai (+3,8 pp). H1 sustentada.</p></div>
-  <div class="card"><div class="k">Experimento 2 · Opus 4.7 high</div><div class="v">+0,005</div><p>mesma diferença de inclinação, IC [−0,11; +0,12]. As curvas sobem na mesma velocidade; o que muda é o nível: P &lt; G &lt; N, com 3,0 logit entre N e P. H1 não sustentada.</p></div>
-  <div class="card"><div class="k">Experimento 2b · prompt + gate (Opus)</div><div class="v">−0,42</div><p>nível PG − P, IC [−0,87; +0,03]. O gate nunca bloqueou sobre o código do prompt (0 de 213 checkpoints). Quando o modelo obedece ao prompt, o gate não acrescenta.</p></div>
+<p class="sub"><span>experimento pré-registrado</span><span>2 modelos</span><span>4 condições</span><span>12 problemas</span><span>1 491 checkpoints</span></p>
+<div class="prose">
+<p class="lead">Agentes de programação degradam a estrutura do próprio código quando o estendem em várias etapas. Dizer ao agente o que evitar melhora o ponto de partida, mas não a velocidade da degradação. Testamos outra coisa: medir a estrutura ao fim de cada turno e não deixar o agente parar enquanto ela estiver ruim.</p>
+<p class="lead">Com um modelo fraco, a verificação freou a curva e o prompt não. Com um modelo de fronteira, nenhum dos dois mudou a velocidade; o prompt baixou muito o nível, o gate baixou menos, e somar os dois não acrescentou nada.</p>
 </div>
-<p>Leitura conjunta: a verificação no laço de execução faz o que a instrução não faz <strong>quando o modelo não obedece à instrução</strong>. Com um modelo que obedece, o prompt basta e o gate, com τ calibrado na mediana do baseline, fica inativo.</p>
+</header>
 
-<h2 id="medimos">O que medimos</h2>
-<div class="two">
-<div>
-<h3>Erosão estrutural</h3>
-<p>Métrica do SlopCodeBench, calculada pelo <code>scb-check</code> 0.1.3 sobre o snapshot ao fim de cada checkpoint. Cada função tem massa de complexidade <code>CC × √sloc</code>; a erosão é a fração dessa massa concentrada em funções com complexidade ciclomática acima de 10.</p>
-<p>0 = nenhuma função complexa; 1 = toda a complexidade em funções complexas. A variável analisada é <code>y = logit(erosão)</code> e o desfecho primário é a <strong>inclinação</strong> de y por checkpoint: quanto o código erode por etapa.</p>
-<h3>Modelo estatístico</h3>
-<p><code>y ~ idx × braço + (1 + idx | problema) + (1 | run)</code>, braço com P de referência. O coeficiente <code>idx:G</code> é a diferença de inclinação G − P (contraste primário). Sensibilidades pré-registradas: ε do logit, limiar de CC 8/10/12, bootstrap por problema, Holm.</p>
+<figure class="wide" id="fig-curvas">
+<div class="controls">
+  <div class="seg" id="exp-tabs" role="tablist">
+    <button class="on" data-exp="minimax" role="tab">Experimento 1, MiniMax M2.7</button>
+    <button data-exp="opus" role="tab">Experimentos 2 e 2b, Opus 4.7</button>
+  </div>
 </div>
-<div>
-<h3>O gate</h3>
-<p>Um script de 105 linhas registrado como <code>hooks.Stop</code> no <code>settings.json</code> do agente. A cada tentativa de encerrar o turno ele roda o <code>scb-check</code> no workspace e:</p>
-<ul>
-<li>se <code>erosão ≤ τ</code>, libera (<code>exit 0</code>);</li>
-<li>se <code>erosão &gt; τ</code>, bloqueia (<code>exit 2</code>) e devolve ao agente a contagem e a lista das funções com CC &gt; 10, com instrução de refatorar;</li>
-<li>no máximo K = 2 bloqueios por checkpoint, depois libera.</li>
-</ul>
-<p>τ é a mediana da erosão do braço N no piloto do mesmo modelo: 0,7764 no MiniMax, 0,7923 no Opus. Entre N e G o único delta é a chave <code>hooks.Stop</code>; entre N e P, o arquivo de prompt.</p>
-<pre>{"hooks": {"Stop": [{"hooks": [{"type": "command",
-  "command": "python3 /opt/gate/gate.py", "timeout": 120}]}]}}</pre>
-</div>
-</div>
+<div class="plot"><canvas id="main-chart" aria-label="Erosão média por checkpoint e condição"></canvas></div>
+<div class="legend" id="main-legend"></div>
+<figcaption id="main-cap"></figcaption>
+</figure>
 
-<h2 id="resultados">Resultados</h2>
-<div class="tabs" id="exp-tabs">
-  <button data-exp="minimax" class="on">Experimento 1 · MiniMax M2.7</button>
-  <button data-exp="opus">Experimentos 2 e 2b · Opus 4.7 high</button>
-</div>
-<h3 id="res-title">Erosão média por checkpoint</h3>
-<div class="chart"><canvas id="main-chart"></canvas></div>
-<p class="note">Média da erosão dos 12 problemas × 3 repetições em cada checkpoint (os problemas têm de 4 a 8 checkpoints, então os últimos pontos têm menos observações). Passe o mouse para ver n e taxa de resolução.</p>
+<section class="prose" id="problema">
+<h2><small>1</small>O problema: o código do agente erode a cada etapa</h2>
+<p>Os benchmarks mais usados para agentes de programação, como o SWE-bench, avaliam uma tarefa isolada: o agente recebe um repositório e um problema e é julgado pela correção do resultado. Isso não captura o que acontece em um projeto real, em que o mesmo código é estendido muitas vezes e cada extensão depende das decisões de design tomadas antes.</p>
+<p>O SlopCodeBench (Orlanski et al., 2026, arXiv 2603.24755) foi criado para medir isso. Em cada problema o agente recebe uma sequência de especificações, os <em>checkpoints</em>, e precisa construir sobre o próprio código anterior. Os testes são ocultos e a especificação descreve só o comportamento externo. Além da correção, o benchmark mede a <em>erosão estrutural</em>: a fração da complexidade do programa concentrada em funções já complexas. Os autores observaram que a erosão cresce em 77% das trajetórias de agentes, cerca de cinco vezes mais rápido do que em repositórios humanos.</p>
+<p>Entre as intervenções que o SlopCodeBench testou está o prompt <code>anti_slop</code>, uma lista de padrões de código a evitar. O prompt reduziu a erosão em 34% a 58% nos modelos GPT, mas, nas palavras dos autores, "a velocidade média de degradação continua a mesma". A instrução muda onde a curva começa, não quanto ela sobe.</p>
+<p>A hipótese deste trabalho é que a degradação iterativa é um problema de <em>feedback</em>, não de <em>instrução</em>. O agente que recebe o prompt sabe o que evitar, mas não enxerga a métrica: a cada checkpoint ele adiciona funcionalidade sem nenhum sinal de que a estrutura está piorando. A intervenção proposta fecha esse laço. Chamamos o mecanismo de <em>gate</em>.</p>
+</section>
 
-<h3>Totais por condição</h3>
-<table id="totals"></table>
+<section class="prose" id="medida">
+<h2><small>2</small>A medida: erosão e sua inclinação</h2>
+<p>Para cada função <em>f</em> de um snapshot, o SlopCodeBench define uma massa de complexidade a partir da complexidade ciclomática de McCabe e do número de linhas de código da função:</p>
+<p class="formula">mass(f) = CC(f) × √SLOC(f)</p>
+<p>A raiz quadrada faz a ramificação pesar mais que o tamanho. A erosão do snapshot é a fração dessa massa concentrada em funções com CC acima de 10:</p>
+<p class="formula">Erosão = <span class="frac"><span>Σ<sub>CC(f) &gt; 10</sub> mass(f)</span><span>Σ<sub>f</sub> mass(f)</span></span></p>
+<p>Vale 0 quando nenhuma função ultrapassa o limiar e 1 quando toda a complexidade está em funções complexas. Ela captura concentração, não volume: um programa pode crescer muito sem erodir, se a complexidade ficar distribuída, e pode erodir sem crescer, se as funções existentes engordarem. A ferramenta que calcula a métrica é a <code>scb-check</code>, distribuída com o benchmark, na versão 0.1.3.</p>
+<h3>Por que a inclinação, e por que em logit</h3>
+<p>Uma média de erosão ao longo dos checkpoints esconde a diferença entre uma curva que começa baixa e sobe e uma que começa alta e fica parada. Por isso o desfecho primário é a <strong>inclinação</strong> da erosão por checkpoint: quanto o código erode a cada etapa.</p>
+<p>A erosão é uma proporção presa entre 0 e 1. Uma reta ajustada diretamente nela prevê valores acima de 1 depois de poucos checkpoints e trata como iguais saltos que não são: ir de 0,50 a 0,62 é fácil, ir de 0,80 a 0,90 é difícil porque o teto está perto. O logit, log(e / (1 − e)), leva a proporção para a reta inteira, onde um crescimento constante por checkpoint faz sentido e desacelera sozinho perto dos extremos. Checkpoints iniciais com código pequeno têm erosão exatamente 0, então o valor é preso em [ε, 1 − ε] com ε = 0,01.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Erosão</th><th class="n">0,10</th><th class="n">0,30</th><th class="n">0,50</th><th class="n">0,70</th><th class="n">0,80</th><th class="n">0,90</th></tr></thead>
+<tbody><tr><td>logit</td><td class="n">−2,20</td><td class="n">−0,85</td><td class="n">0,00</td><td class="n">+0,85</td><td class="n">+1,39</td><td class="n">+2,20</td></tr></tbody>
+</table><p class="cap">A mesma distância em logit (0,85) separa 0,30 de 0,50 e 0,50 de 0,70, mas só 0,10 de erosão separa 0,80 de 0,90, que estão 0,81 logit afastados.</p></div>
+</section>
 
-<div id="res-minimax">
-<h3>Contrastes pré-registrados (inclinação, logit por checkpoint)</h3>
-<table>
-<tr><th>Contraste</th><th class="num">Estimativa</th><th class="num">IC 95%</th><th class="num">p (unilateral, Holm)</th><th>Leitura</th></tr>
-<tr><td><b>G − P</b> (primário)</td><td class="num">−0,179</td><td class="num">[−0,253; −0,105]</td><td class="num">&lt; 0,001</td><td>o gate freia mais que o prompt</td></tr>
-<tr><td>G − N</td><td class="num">−0,122</td><td class="num">[−0,197; −0,048]</td><td class="num">0,001</td><td>o gate muda a curva do baseline</td></tr>
-<tr><td>N − P</td><td class="num">−0,057</td><td class="num">[−0,131; +0,018]</td><td class="num">0,067</td><td>o prompt não reduz a inclinação de forma detectável</td></tr>
-</table>
-<p class="note">Inclinação de P: +0,345 logit/checkpoint. Correção (fração de checkpoints com 100% dos testes core): G − P = +3,8 pp [−3,0; +10,8], não-inferior. Custo: G/P = 1,08. Verbosidade e linhas de código são as menores em G (sem deslocamento de métrica). Resultado estável sob ε ∈ {0,005; 0,02}, CC &gt; {8, 12} e bootstrap por problema.</p>
-<h3>O tratamento foi aplicado?</h3>
-<p>Cobertura do gate: 86% dos checkpoints com pelo menos um Stop (nos 14% restantes o modelo estourou 100 turnos e o hook não disparou). 211 Stops, 40 bloqueios em 36 checkpoints. Em 24 de 24 checkpoints bloqueados com Stop seguinte, a erosão caiu dentro do turno (queda média 0,30).</p>
-</div>
+<section class="prose" id="gate">
+<h2><small>3</small>O gate: um Stop hook que mede e bloqueia</h2>
+<p>O Claude Code, harness de agente da Anthropic, executa comandos de shell em eventos do ciclo de vida do agente, os <em>hooks</em>. O evento <code>Stop</code> dispara quando o agente decide que terminou o turno. Se o comando sai com código 2, o harness impede o encerramento e entrega ao agente o texto que o comando escreveu em <code>stderr</code>. O agente continua trabalhando e, quando tenta encerrar de novo, o hook roda outra vez.</p>
+<p>O gate é um script Python de cerca de cem linhas registrado nesse evento. A cada tentativa de encerramento ele:</p>
+<ol class="steps">
+<li>copia o workspace para um diretório temporário, excluindo ambientes virtuais, caches, o diretório <code>.git</code> e os arquivos estáticos fornecidos pelo problema, exatamente como a avaliação final faz;</li>
+<li>roda a <code>scb-check</code> na cópia e lê a erosão e a lista de funções com CC acima de 10;</li>
+<li>mantém um contador de bloqueios no turno, zerado quando o harness informa que esta é a primeira tentativa de encerramento;</li>
+<li>se a erosão passa de um limiar τ e o contador está abaixo de K = 2, sai com código 2 e devolve a mensagem abaixo. Caso contrário libera, e o agente encerra.</li>
+</ol>
+<pre><code>[gate] erosion=0.812 &gt; tau=0.7764 (7 de 23 funções com CC &gt; 10; bloqueio 1/2).
+Reduza a complexidade ciclomática das funções com CC &gt; 10 sem adicionar
+wrappers triviais; mantenha os testes passando.</code></pre>
+<p>O agente vê o valor da erosão, a contagem de funções complexas e uma instrução genérica de refatorar. Não vê os testes ocultos nem o valor de τ antes do primeiro bloqueio. O limite K = 2 restringe o custo a duas rodadas extras por checkpoint. Uma falha da ferramenta de medida resulta em liberação, nunca em bloqueio. Cada decisão fica registrada em um arquivo JSON exportado junto com os traces do agente, o que permite verificar depois se o tratamento foi mesmo aplicado.</p>
+<p>Entre a condição sem intervenção e a condição com gate, a única diferença de configuração do agente é esta chave:</p>
+<pre><code>settings:
+  hooks:
+    Stop:
+      - hooks:
+          - type: command
+            command: python3 /opt/gate/gate.py
+            timeout: 120</code></pre>
+<p>O limiar τ é a mediana da erosão da condição sem intervenção em um piloto com o mesmo modelo, fixado antes do experimento principal: metade dos checkpoints sem intervenção ultrapassa o limiar. Deu 0,7764 para o MiniMax e 0,7923 para o Opus.</p>
+</section>
 
-<div id="res-opus" hidden>
-<h3>Contrastes pré-registrados (experimento 2, três braços)</h3>
-<table>
-<tr><th>Contraste</th><th class="num">Inclinação</th><th class="num">IC 95%</th><th class="num">Nível (logit)</th><th class="num">IC 95%</th></tr>
-<tr><td><b>G − P</b> (primário)</td><td class="num">+0,005</td><td class="num">[−0,108; +0,118]</td><td class="num">+1,083</td><td class="num">[+0,670; +1,496]</td></tr>
-<tr><td>G − N</td><td class="num">−0,003</td><td class="num">[−0,116; +0,110]</td><td class="num">−1,951</td><td class="num">[−2,364; −1,538]</td></tr>
-<tr><td>N − P</td><td class="num">+0,008</td><td class="num">[−0,105; +0,121]</td><td class="num">+3,034</td><td class="num">[+2,621; +3,447]</td></tr>
-</table>
-<p class="note">Inclinação de P: +0,174 logit/checkpoint. Nenhum contraste de inclinação exclui zero; todos os de nível excluem (p Holm &lt; 0,001). Correção: G − P = 0,0 pp [−8,1; +6,8], não-inferior. Custo-equivalente: G/P = 0,88. Gate em G: cobertura 98,6%, 246 Stops, 33 bloqueios; a erosão caiu dentro do turno em 32 de 32 checkpoints bloqueados (queda média 0,75).</p>
-<h3>Experimento 2b: prompt + gate (PG)</h3>
-<table>
-<tr><th>Contraste</th><th class="num">Inclinação</th><th class="num">IC 95%</th><th class="num">Nível (logit)</th><th class="num">IC 95%</th><th>Leitura pré-registrada</th></tr>
-<tr><td><b>PG − P</b></td><td class="num">+0,064</td><td class="num">[−0,044; +0,172]</td><td class="num">−0,422</td><td class="num">[−0,870; +0,027]</td><td>IC inclui zero: o gate não acrescenta ao prompt</td></tr>
-<tr><td>PG − G</td><td class="num">+0,056</td><td class="num">[−0,052; +0,164]</td><td class="num">−1,508</td><td class="num">[−1,956; −1,059]</td><td>o prompt acrescenta ao gate</td></tr>
-</table>
-<p class="note">Gate em PG: 212 de 213 checkpoints com Stop, <strong>0 bloqueios</strong>: a erosão medida no Stop nunca passou de τ = 0,79 (máximo 0,54). Com o prompt, o código fica abaixo do limiar e o gate vira observador.</p>
-</div>
-
-<h3>Checagem com Sonnet 4.6</h3>
-<p>P e G em <code>forge</code> e <code>log_query</code>, 1 repetição, τ do MiniMax. O hook disparou em 13 de 13 checkpoints; houve um único bloqueio, em <code>forge</code> checkpoint 8: erosão 0,81 (10 funções com CC &gt; 10) → 0,00 no mesmo turno, com todos os testes core passando e verbosidade caindo. Prova de existência de que um modelo capaz reage ao feedback por completo, não medida.</p>
-
-<h2 id="problemas">Por problema</h2>
-<div class="tabs" id="prob-tabs">
-  <button data-exp="minimax" class="on">MiniMax</button>
-  <button data-exp="opus">Opus</button>
-</div>
-<div class="grid" id="prob-grid"></div>
-<p class="note">Erosão média das 3 repetições por checkpoint, uma curva por condição. Eixo y de 0 a 1 em todos os painéis.</p>
-
-<h2 id="desenho">Desenho</h2>
-<h3>Condições</h3>
-<table>
-<tr><th>Braço</th><th>Prompt</th><th>Hook</th><th>O que testa</th></tr>
-<tr><td><span class="sw" style="background:var(--N)"></span><b>N</b></td><td><code>just-solve</code></td><td>nenhum</td><td>baseline: como o agente erode sem intervenção</td></tr>
-<tr><td><span class="sw" style="background:var(--P)"></span><b>P</b></td><td><code>anti_slop</code> (do paper)</td><td>nenhum</td><td>intervenção por instrução</td></tr>
-<tr><td><span class="sw" style="background:var(--G)"></span><b>G</b></td><td><code>just-solve</code></td><td>Stop hook com <code>scb-check</code></td><td>intervenção por verificação, sem mudar o prompt</td></tr>
-<tr><td><span class="sw" style="background:var(--PG)"></span><b>PG</b></td><td><code>anti_slop</code></td><td>Stop hook</td><td>os efeitos somam? (só no Opus, experimento 2b)</td></tr>
-</table>
-<p>Experimento em blocos: cada par (problema, repetição) recebe todas as condições, em ordem de quadrado latino. 12 problemas × 3 repetições × 3 braços = 108 execuções e 639 checkpoints por experimento; PG acrescenta 213. Unidade experimental: a execução; unidade de medida: o checkpoint. Cada checkpoint é uma sessão nova do Claude Code; só o workspace persiste.</p>
-
-<h3>Problemas</h3>
-<p>12 dos 36 do catálogo v1.0, estratificados por número de checkpoints, com mais peso nos longos, onde a inclinação aparece melhor: 71 checkpoints por repetição.</p>
-<table>
-<tr><th>Checkpoints</th><th>Problemas</th></tr>
+<section class="prose" id="desenho">
+<h2><small>4</small>Desenho experimental</h2>
+<p>Todas as condições compartilham o agente, o modelo, a imagem Docker, os problemas e o limite de 100 turnos por checkpoint. O que muda entre elas é um arquivo de prompt, uma chave de configuração, ou os dois.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Condição</th><th>Prompt</th><th>Stop hook</th><th>O que representa</th></tr></thead>
+<tbody>
+<tr><td><span class="arm N"></span><strong>N</strong></td><td>padrão do benchmark</td><td>nenhum</td><td>baseline, sem defesa</td></tr>
+<tr><td><span class="arm P"></span><strong>P</strong></td><td><code>anti_slop</code></td><td>nenhum</td><td>defesa por instrução</td></tr>
+<tr><td><span class="arm G"></span><strong>G</strong></td><td>padrão do benchmark</td><td>gate</td><td>defesa por verificação, sem mudar o prompt</td></tr>
+<tr><td><span class="arm PG"></span><strong>PG</strong></td><td><code>anti_slop</code></td><td>gate</td><td>os efeitos somam? (só no experimento 2b)</td></tr>
+</tbody></table></div>
+<p>O prompt padrão diz apenas para implementar um programa que resolva a especificação por completo. O <code>anti_slop</code> acrescenta uma lista de práticas (agrupar funções por arquivo, sem funções-deus, documentar) e de padrões a evitar (checagens defensivas anormais, variáveis de uso único, comentários supérfluos, wrappers triviais, aninhamento profundo, escadas de if/else, excesso de helpers). Os dois são os do SlopCodeBench, sem alteração.</p>
+<p>Os contrastes foram definidos antes dos dados. O <strong>primário</strong> é G − P: verificar faz mais que instruir? O secundário é G − N: o gate muda a curva do baseline? O de referência é N − P: o prompt replica o achado do benchmark? A hipótese H1 diz que a inclinação de G é menor que a de P, com intervalo de confiança de 95% inteiramente abaixo de zero, e que a correção não cai mais que 10 pontos percentuais.</p>
+<h3>Problemas e blocos</h3>
+<p>Doze dos 36 problemas do catálogo, estratificados pelo número de checkpoints e com mais peso nos longos, onde a inclinação é mais bem estimada. Ficaram de fora problemas de 3 checkpoints, a família que exige conhecimento de um jogo específico e três problemas com dependências frágeis em Docker.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Checkpoints</th><th>Problemas</th></tr></thead>
+<tbody>
 <tr><td>4</td><td><code>file_backup</code>, <code>layered_config_synthesizer</code></td></tr>
 <tr><td>5</td><td><code>code_search</code>, <code>log_query</code>, <code>migrate_configs</code>, <code>database_migration</code></td></tr>
 <tr><td>6 a 7</td><td><code>cfgpipe</code>, <code>execution_server</code>, <code>sheeteval</code></td></tr>
 <tr><td>8</td><td><code>forge</code>, <code>circuit_eval</code>, <code>mocked_http</code></td></tr>
-</table>
+</tbody></table></div>
+<p>Cada par (problema, repetição) é um bloco e recebe todas as condições, em ordem de quadrado latino, para não confundir condição com deriva da API ao longo dos dias. São 12 problemas × 3 repetições × 3 condições = 108 execuções e 639 checkpoints por experimento; a condição PG acrescenta 213. Cada checkpoint abre uma sessão nova do Claude Code; só o workspace persiste. Não há seed.</p>
+<h3>Análise pré-registrada</h3>
+<p>Um modelo linear misto com a posição do checkpoint, a condição e a interação entre os dois, com nível e inclinação aleatórios por problema e nível aleatório por execução. O coeficiente da interação é a diferença de inclinação entre condições, em logit por checkpoint. Correção de Holm nos três contrastes. Correção do código medida como a fração de checkpoints em que 100% dos testes centrais passam, com não-inferioridade por bootstrap de problema. Sensibilidades: ε em 0,005 e 0,02, limiar de CC em 8 e 12, e bootstrap por problema das inclinações por execução. Para o experimento 2 foi pré-registrado também, antes dos dados, um contraste de <strong>nível</strong>: a diferença média de logit entre condições no modelo sem interação.</p>
+</section>
 
-<h3>Versões fixadas</h3>
-<table>
-<tr><th>Item</th><th>Experimento 1</th><th>Experimentos 2 e 2b</th></tr>
-<tr><td>Modelo</td><td>MiniMax M2.7 via OpenRouter, thinking low</td><td>Claude Opus 4.7, thinking high, pela assinatura</td></tr>
-<tr><td>Claude Code</td><td>2.0.51</td><td>2.1.111 (linha do leaderboard scbench.ai)</td></tr>
+<section class="prose" id="exp1">
+<h2><small>5</small>Experimento 1: MiniMax M2.7</h2>
+<p>O modelo mais barato que roda no Claude Code e o único com resultados publicados para os dois prompts no SlopCodeBench, o que permite validar a instrumentação. A erosão média sem intervenção (0,735) ficou próxima da reportada pelo benchmark (0,73), e a com <code>anti_slop</code> (0,529) da reportada (0,51).</p>
+<div class="tablewrap"><table id="tot-minimax"></table></div>
+<p>Na figura do topo, com o experimento 1 selecionado: N sobe de 0,56 no primeiro checkpoint a 0,81 no quarto e satura. P começa bem abaixo, em 0,33, e sobe em paralelo a N, cerca de 0,20 abaixo em todos os checkpoints. G começa entre as duas, em 0,48, e é a única curva quase plana a partir do terceiro checkpoint: termina em 0,68, no mesmo nível de P.</p>
+<h3>O gate reduz a inclinação. O prompt não.</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>Contraste</th><th class="n">Inclinação (logit/checkpoint)</th><th class="n">IC 95%</th><th class="n">p (Holm)</th></tr></thead>
+<tbody>
+<tr><td class="main">G − P, primário</td><td class="n">−0,179</td><td class="n">[−0,253; −0,105]</td><td class="n">&lt; 0,0001</td></tr>
+<tr><td>G − N</td><td class="n">−0,122</td><td class="n">[−0,197; −0,048]</td><td class="n">0,0013</td></tr>
+<tr><td>N − P</td><td class="n">−0,057</td><td class="n">[−0,131; +0,018]</td><td class="n">0,067</td></tr>
+</tbody></table><p class="cap">Inclinação de referência de P: +0,345 logit por checkpoint.</p></div>
+<p>Uma diferença de 0,18 logit por checkpoint acumula cerca de 0,9 logit em cinco checkpoints, o que separa, por exemplo, uma erosão de 0,80 de uma de 0,62. A correção não caiu: G resolveu 3,8 pontos percentuais a mais de checkpoints que P, com intervalo [−3,0; +10,8], acima do limite de não-inferioridade. H1 é sustentada. O resultado se mantém em todas as sensibilidades: G − P fica entre −0,15 e −0,21 com ε em 0,005 ou 0,02 e com o limiar de CC em 8 ou 12, e o bootstrap por problema dá −0,275 [−0,487; −0,079].</p>
+<p>O prompt, por sua vez, replica o achado do benchmark: baixa o nível, não a taxa. Uma análise exploratória explica por que a inclinação de P em logit parece até maior que a de N. Quem começa baixo tem mais espaço para subir, e N satura em 0,81 a partir do quarto checkpoint, o que achata sua reta. Ajustando pelo nível inicial, P − N vai a −0,045 [−0,173; +0,084]: nenhuma diferença. O número de funções com CC acima de 10 cresce na mesma taxa nas duas condições, de 2,4 a 14,4 em N e de 1,6 a 13,5 em P. O prompt reparte o código em mais arquivos e funções menores, mas as funções complexas se acumulam na mesma velocidade. O efeito do gate sobrevive ao mesmo ajuste: G − P ajustado é −0,196 [−0,328; −0,064].</p>
+<h3>Custo e cobertura</h3>
+<p>O gate custou 8% a mais que P e 12% a mais que N em dólares. Em turnos por checkpoint, G (60,9) ficou no nível de P (60,2), ambos acima de N (54,8). O hook disparou em 183 dos 213 checkpoints de G (86%). Nos 30 restantes o agente esgotou os 100 turnos e o Claude Code encerrou por limite, sem o evento Stop; nesses checkpoints G rodou na prática como N, então o efeito medido é conservador. Houve 211 eventos Stop e 40 bloqueios em 36 checkpoints (17%).</p>
+</section>
+
+<figure class="wide small" id="fig-blocos">
+<div class="controls">
+  <div class="seg" id="blk-tabs">
+    <button class="on" data-exp="minimax">MiniMax, 36 checkpoints bloqueados</button>
+    <button data-exp="opus">Opus, 32 checkpoints bloqueados</button>
+  </div>
+</div>
+<div class="plot" style="height:360px"><canvas id="blk-chart" aria-label="Erosão no momento do bloqueio e no último Stop do mesmo checkpoint"></canvas></div>
+<figcaption id="blk-cap"></figcaption>
+</figure>
+
+<section class="prose">
+<p>Em 24 dos 36 checkpoints bloqueados do MiniMax houve um Stop seguinte que permite medir a reação dentro do turno; em todos os 24 a erosão caiu, em média 0,30. Nos outros 12 o agente esgotou os turnos antes de tentar encerrar de novo, e a linha fica horizontal na figura. Quando recebe a contagem de funções complexas e a instrução de refatorar, o agente refatora.</p>
+</section>
+
+<section class="prose" id="exp2">
+<h2><small>6</small>Experimento 2: Opus 4.7 com raciocínio alto</h2>
+<p>O desenho inteiro foi repetido com Claude Opus 4.7, esforço de raciocínio alto, e Claude Code 2.1.111, a mesma combinação de uma linha do leaderboard público do SlopCodeBench, cuja erosão (0,759) a condição N reproduz (0,756). O limiar foi recalibrado em um piloto próprio: τ = 0,7923. Nenhum dos 639 checkpoints esgotou o limite de turnos. O experimento 2b acrescentou a condição PG, prompt e gate juntos, com 213 checkpoints.</p>
+<div class="tablewrap"><table id="tot-opus"></table></div>
+<h3>As três curvas sobem na mesma velocidade</h3>
+<div class="tablewrap"><table>
+<thead><tr><th>Contraste</th><th class="n">Inclinação</th><th class="n">IC 95%</th><th class="n">Nível (logit)</th><th class="n">IC 95%</th></tr></thead>
+<tbody>
+<tr><td class="main">G − P, primário</td><td class="n">+0,005</td><td class="n">[−0,108; +0,118]</td><td class="n">+1,08</td><td class="n">[+0,67; +1,50]</td></tr>
+<tr><td>G − N</td><td class="n">−0,003</td><td class="n">[−0,116; +0,110]</td><td class="n">−1,95</td><td class="n">[−2,36; −1,54]</td></tr>
+<tr><td>N − P</td><td class="n">+0,008</td><td class="n">[−0,105; +0,121]</td><td class="n">+3,03</td><td class="n">[+2,62; +3,45]</td></tr>
+</tbody></table><p class="cap">Inclinação de referência de P: +0,174 logit por checkpoint. Nenhum contraste de inclinação exclui zero (p corrigido = 1); todos os de nível excluem (p &lt; 0,001).</p></div>
+<p>H1 não é sustentada neste modelo. Nem o gate nem o prompt mudam a velocidade da erosão, e o resultado é estável sob todas as sensibilidades. O que muda é o <strong>nível</strong>: N parte de 0,64 e satura em 0,81; G fica entre 0,42 e 0,50; P, entre 0,18 e 0,26. O gate baixa a erosão em relação ao baseline, mas o prompt baixa muito mais.</p>
+<p>A correção não se move: G − P = 0,0 pontos percentuais [−8,1; +6,8], com pass rate central média entre 0,88 e 0,90 em todas as condições. Em custo-equivalente de API o gate ficou 13% acima de N e 12% <em>abaixo</em> de P, porque o Opus gasta quase o dobro de turnos sob o prompt <code>anti_slop</code> (32 por checkpoint) do que sob o prompt padrão (18), enquanto o gate acrescenta três turnos em média.</p>
+<h3>O gate funciona quando dispara, e dispara pouco</h3>
+<p>O hook avaliou 210 dos 213 checkpoints de G e bloqueou 33 vezes em 32 checkpoints (15%). Nos 32 a erosão caiu dentro do turno, com queda média de 0,75; em 23 deles chegou a zero (figura acima, com Opus selecionado). O mecanismo funciona melhor com o modelo capaz. O que não aparece é efeito sobre a inclinação, porque com τ na mediana de N o gate age em 15% dos checkpoints e os demais passam sem intervenção.</p>
+<p>No checkpoint seguinte a um bloqueio a erosão volta a subir, em média de 0,09 para 0,28, mais rápido que o ritmo normal de N (0,03 por checkpoint), mas nenhum dos 28 checkpoints seguintes voltou a passar de τ. O agente desfaz parte da refatoração; o nível fica abaixo do que havia.</p>
+</section>
+
+<figure class="wide" id="fig-tau">
+<div class="tau">
+  <div>
+    <div class="controls">
+      <div class="seg" id="tau-tabs">
+        <button data-exp="minimax">MiniMax</button>
+        <button class="on" data-exp="opus">Opus</button>
+      </div>
+    </div>
+    <div class="plot"><canvas id="tau-chart" aria-label="Distribuição acumulada da erosão por condição"></canvas></div>
+  </div>
+  <div class="tauside">
+    <label for="tau-range">Limiar τ: <output id="tau-out">0,79</output></label>
+    <input type="range" id="tau-range" min="0" max="1" step="0.01" value="0.79">
+    <ul class="bars" id="tau-bars"></ul>
+    <p>Fração dos checkpoints de cada condição cuja erosão final ficou acima de τ. Em N e P, é o quanto um gate com esse τ teria a fazer sobre aquele código; em G e PG, o que sobrou depois do gate.</p>
+  </div>
+</div>
+<figcaption>Distribuição acumulada da erosão dos checkpoints por condição. Mova o limiar para ver quantos checkpoints passariam dele. A linha vertical marca o τ escolhido.</figcaption>
+</figure>
+
+<section class="prose">
+<h3>Experimento 2b: prompt e gate juntos</h3>
+<p>P e G diferem em dois fatores, prompt e hook. A quarta condição, PG, fecha a lacuna e torna o desenho fatorial 2 × 2. A pergunta é se o gate ainda acrescenta algo quando o modelo obedece ao prompt.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Contraste</th><th class="n">Inclinação</th><th class="n">IC 95%</th><th class="n">Nível (logit)</th><th class="n">IC 95%</th></tr></thead>
+<tbody>
+<tr><td class="main">PG − P</td><td class="n">+0,064</td><td class="n">[−0,044; +0,172]</td><td class="n">−0,42</td><td class="n">[−0,87; +0,03]</td></tr>
+<tr><td>PG − G</td><td class="n">+0,056</td><td class="n">[−0,052; +0,164]</td><td class="n">−1,51</td><td class="n">[−1,96; −1,06]</td></tr>
+</tbody></table><p class="cap">Modelo com quatro condições, p bilateral com Holm. O intervalo de PG − P inclui zero: o gate não acrescenta ao prompt. O prompt acrescenta ao gate.</p></div>
+<p>O mecanismo explica o resultado. O gate avaliou 212 dos 213 checkpoints de PG e <strong>não bloqueou nenhum</strong>: sob o prompt <code>anti_slop</code>, a erosão no momento do Stop nunca passou de 0,54, bem abaixo de 0,79. No explorador acima, com Opus selecionado e τ em 0,79, a barra de P fica perto de zero. PG é, na prática, P com uma medição a mais por checkpoint: mesmos turnos, mesmo custo, mesma correção. Esta condição rodou depois das nove repetições do experimento 2, então a ordem temporal é uma ameaça registrada.</p>
+</section>
+
+<section class="prose" id="goodhart">
+<h2><small>7</small>Goodhart: o agente otimiza a métrica ou o código?</h2>
+<p>Gate e desfecho usam a mesma ferramenta. O agente poderia satisfazer a métrica sem melhorar o código, por exemplo fatiando funções em wrappers triviais ou duplicando trechos. Por isso o pré-registro exigiu reportar verbosidade, linhas de código e wrappers junto com a erosão, e uma análise exploratória posterior procurou sinais mais específicos em cada função dos 1 491 snapshots.</p>
+<p><strong>Troca de métrica: não houve.</strong> Nos dois experimentos, quando a erosão cai em G a verbosidade cai junto e a duplicação quase não muda. As linhas de código finais de G são as menores (MiniMax) ou iguais às de N (Opus).</p>
+<p><strong>Massa de complexidade: cai de verdade.</strong> No Opus, nos 23 checkpoints bloqueados com um checkpoint anterior, a massa em funções complexas caiu em 19 e a massa total em 14, enquanto nos checkpoints não bloqueados a massa total cresce em média 531 por checkpoint. O agente simplificou, não só fatiou.</p>
+<p><strong>Acúmulo logo abaixo do limiar: sim, nos checkpoints bloqueados.</strong> O gate diz "CC acima de 10" e o agente para logo abaixo de 10.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Opus 4.7</th><th class="n">Funções com CC 8 a 10</th><th class="n">Funções com CC 11 a 13</th><th class="n">Razão</th></tr></thead>
+<tbody>
+<tr><td>G, checkpoints bloqueados</td><td class="n">157</td><td class="n">26</td><td class="n">6,0</td></tr>
+<tr><td>G, não bloqueados</td><td class="n">1 019</td><td class="n">477</td><td class="n">2,1</td></tr>
+<tr><td>N</td><td class="n">791</td><td class="n">575</td><td class="n">1,4</td></tr>
+<tr><td>P</td><td class="n">1 148</td><td class="n">364</td><td class="n">3,2</td></tr>
+</tbody></table><p class="cap">P tem razão 3,2 sem gate nenhum: parte do acúmulo é o que "escreva funções menos complexas" produz naturalmente. Depois de um bloqueio a razão vai a 6,0. No MiniMax os bloqueados não diferem dos não bloqueados (2,2 contra 2,2).</p></div>
+<p><strong>Wrappers:</strong> a fração de funções com um único chamador em G (0,49 no Opus) fica entre N (0,46) e P (0,54); nos checkpoints bloqueados sobe para 0,53, dentro do que o prompt faz sozinho.</p>
+<p>A leitura é que o gate funciona como refatoração dirigida pelo limiar. A redução de complexidade é real, mas o alvo vira meta visível e as funções se ajeitam logo abaixo dele. O limiar de CC e o τ são parâmetros do tratamento, não detalhes de medição; é por isso que a sensibilidade com CC em 8 e 12 estava pré-registrada. O controle mais forte contra Goodhart, uma condição <em>sham</em> em que o hook bloqueia uma vez com "revise seu código" sem medir nada, separaria o efeito do feedback dirigido do efeito do turno extra. Não foi rodada.</p>
+</section>
+
+<figure class="wide" id="fig-problemas">
+<div class="controls">
+  <div class="seg" id="prob-tabs">
+    <button class="on" data-exp="minimax">MiniMax</button>
+    <button data-exp="opus">Opus</button>
+  </div>
+</div>
+<div class="grid" id="prob-grid"></div>
+<figcaption>Erosão média das 3 repetições por checkpoint em cada um dos 12 problemas, uma curva por condição, eixo de 0 a 1 em todos os painéis. As cores seguem a legenda da figura do topo.</figcaption>
+</figure>
+
+<section class="prose" id="conclusao">
+<h2><small>8</small>O que fica</h2>
+<p>A verificação no laço de execução faz o que a instrução não faz <strong>quando o modelo não obedece à instrução</strong>. Com o MiniMax, o prompt melhorou o ponto de partida e a curva continuou subindo no mesmo ritmo; o gate, agindo no momento exato em que o agente ia parar, com um número e uma lista de funções, foi a única intervenção que mudou a inclinação, sem custo em correção.</p>
+<p>Com o Opus, um modelo que obedece ao prompt, o prompt basta: ele mantém a erosão abaixo do limiar em quase todos os checkpoints, e o gate calibrado na mediana do baseline fica inativo. O gate sozinho ainda reduz o nível em relação a não fazer nada, e cada bloqueio zera a erosão na maioria das vezes, mas ele age em 15% dos checkpoints e as curvas sobem na mesma velocidade nas quatro condições.</p>
+<p>Em um resumo: o prompt muda onde a curva começa; o gate muda a inclinação quando o modelo precisa de feedback e muda só o nível quando não precisa. Intervenções de qualidade em agentes iterativos deveriam ser lidas por esses dois parâmetros, não por uma média ao longo dos checkpoints.</p>
+<h3>Limites</h3>
+<ul>
+<li><strong>Dois modelos, um harness, 12 problemas em Python.</strong> O MiniMax é o modelo mais fraco do SlopCodeBench; o Opus, um dos mais fortes. Entre eles há um espaço não medido.</li>
+<li><strong>τ fixo na mediana do baseline.</strong> Um τ mais baixo no Opus bloquearia mais e poderia mudar a inclinação; custaria mais turnos. É o experimento seguinte mais óbvio.</li>
+<li><strong>Cobertura.</strong> No MiniMax, 14% dos checkpoints esgotaram o limite de turnos sem disparar o hook. Em produção o gate precisaria de um orçamento de turnos próprio para a refatoração.</li>
+<li><strong>Goodhart.</strong> Sem a condição sham, não dá para separar feedback dirigido de turno extra. O acúmulo de funções logo abaixo de CC 10 após bloqueios mostra que o agente mira o limiar.</li>
+<li><strong>A erosão é um proxy</strong> de manutenibilidade, não uma medida direta dela.</li>
+</ul>
+</section>
+
+<section class="prose" id="reproducao">
+<h2><small>9</small>Para reproduzir</h2>
+<p>Tudo o que segue foi fixado antes de cada experimento principal.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Item</th><th>Experimento 1</th><th>Experimentos 2 e 2b</th></tr></thead>
+<tbody>
+<tr><td>Modelo</td><td>MiniMax M2.7 via OpenRouter, raciocínio baixo</td><td>Claude Opus 4.7, raciocínio alto, pela assinatura Claude</td></tr>
+<tr><td>Claude Code</td><td>2.0.51</td><td>2.1.111</td></tr>
 <tr><td>τ do gate</td><td>0,7764</td><td>0,7923</td></tr>
-<tr><td>Harness</td><td colspan="2"><code>slop-code-bench</code> @ 06b5c068; catálogo scb-problems v1.0 (4d38d30); <code>scb-check</code> 0.1.3; <code>step_limit</code> 100; <code>pass_policy</code> any</td></tr>
-<tr><td>Ambiente</td><td colspan="2">Docker <code>mpes-gate:py3.12</code>, mesma imagem em todos os braços; VM Hetzner CAX41 (aarch64)</td></tr>
-<tr><td>Custo</td><td>≈ US$ 157 nos três braços</td><td>US$ 0 (≈ US$ 1 630 a preço de API)</td></tr>
-</table>
-
-<h3>Ameaças à validade</h3>
-<ul>
-<li><strong>Goodhart.</strong> Gate e desfecho usam o mesmo <code>scb-check</code>. Por isso verbosidade, linhas de código e wrappers triviais são reportados junto; em nenhum experimento o gate deslocou a métrica. Um braço <em>sham</em> (bloqueio sem métrica) separaria feedback dirigido de turno extra e não foi rodado.</li>
-<li><strong>Cobertura.</strong> No MiniMax, 14% dos checkpoints estouraram o limite de turnos sem disparar o hook; o efeito medido é conservador. No Opus a cobertura foi 98,6%.</li>
-<li><strong>Generalização.</strong> 12 dos 36 problemas; dois modelos; τ fixo na mediana do baseline. No experimento 2b a ordem temporal (PG depois dos outros nove braço-reps) é uma ameaça registrada.</li>
-</ul>
-
-<h2 id="artefatos">Artefatos</h2>
-<ul>
-<li><a href="https://github.com/diego-augusto/mpes/blob/main/EXPERIMENT.md">EXPERIMENT.md</a>: pré-registro completo, pins, análise, regra de decisão e registro de execução dos três experimentos.</li>
-<li><a href="https://github.com/diego-augusto/mpes/blob/main/docker/gate.py">docker/gate.py</a> e <a href="https://github.com/diego-augusto/mpes/blob/main/configs/agent_gate_opus47.yaml">configs/agent_gate_opus47.yaml</a>: o hook e a configuração do agente.</li>
-<li><a href="https://github.com/diego-augusto/mpes/blob/main/analysis/slope.py">analysis/slope.py</a>: análise pré-registrada; <a href="https://github.com/diego-augusto/mpes/blob/main/results/summary.md">results/summary.md</a> e <a href="https://github.com/diego-augusto/mpes/blob/main/results/summary_opus.md">summary_opus.md</a>: saídas.</li>
-<li>Dados brutos (3,5 GB: snapshots, transcripts, avaliações, decisões do gate): release <a href="https://github.com/diego-augusto/mpes/releases/tag/data-2026-11-12">data-2026-11-12</a>.</li>
-<li>Harness e métricas: <a href="https://github.com/SprocketLab/slop-code-bench">SprocketLab/slop-code-bench</a>, <a href="https://www.scbench.ai/">scbench.ai</a>.</li>
-</ul>
+<tr><td>K</td><td colspan="2">2 bloqueios por checkpoint</td></tr>
+<tr><td>Harness</td><td colspan="2"><code>slop-code-bench</code> no commit <code>06b5c068</code>; catálogo <code>scb-problems</code> v1.0, commit <code>4d38d30</code></td></tr>
+<tr><td>Métrica</td><td colspan="2"><code>scb-check</code> 0.1.3, com <code>ast-grep</code> 0.42.1 para a verbosidade</td></tr>
+<tr><td>Execução do agente</td><td colspan="2"><code>--print</code>, <code>--permission-mode bypassPermissions</code>, 100 turnos por checkpoint, sessão nova a cada checkpoint, <code>pass_policy: any</code></td></tr>
+<tr><td>Ambiente</td><td colspan="2">Uma imagem Docker (Python 3.12, uv, scb-check, gate em <code>/opt/gate/gate.py</code>) para todas as condições; VM aarch64 de 16 vCPU</td></tr>
+<tr><td>Análise</td><td colspan="2">Modelo misto em statsmodels; ε = 0,01; Holm; bootstrap por problema com 2 000 reamostras</td></tr>
+<tr><td>Custo</td><td>cerca de US$ 157 nos três braços</td><td>US$ 0 pela assinatura (cerca de US$ 1 630 a preço de API)</td></tr>
+</tbody></table></div>
+<p>O gate bloqueia quando a erosão medida é maior que τ, nunca quando é igual. O contador de bloqueios zera quando o campo <code>stop_hook_active</code> do evento é falso. O hook grava um arquivo JSON por decisão dentro do diretório de projeto do Claude Code no container, o único caminho que o harness exporta, com a erosão, a contagem e os nomes das funções com CC acima de 10 e a decisão tomada. Uma falha da ferramenta de medida libera o turno. Para medir o mesmo código que a avaliação final, o hook exclui os arquivos estáticos do problema e os mesmos padrões de arquivo que o snapshot do harness ignora.</p>
+</section>
 
 </main>
-<footer>Diego Moura · mestrado profissional em engenharia de software · 2026 · dados e código no <a href="https://github.com/diego-augusto/mpes">repositório</a></footer>
+<footer class="wrap">Pesquisa de mestrado profissional em engenharia de software, 2026. Métricas e problemas do SlopCodeBench (Orlanski et al., 2026).</footer>
 
 <script>
-const COLORS = {N:getCSS('--N'), P:getCSS('--P'), G:getCSS('--G'), PG:getCSS('--PG')};
-const LABEL = {N:'N · normal', P:'P · prompt anti_slop', G:'G · gate', PG:'PG · prompt + gate'};
-const TITLE = {minimax:'Experimento 1 · MiniMax M2.7 · 639 checkpoints', opus:'Experimentos 2 e 2b · Opus 4.7 high · 852 checkpoints'};
-function getCSS(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim()}
-Chart.defaults.color = getCSS('--muted'); Chart.defaults.borderColor = getCSS('--line');
-Chart.defaults.font.family = 'system-ui, sans-serif';
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const COLORS = {N:css('--N'), P:css('--P'), G:css('--G'), PG:css('--PG')};
+const LABEL = {N:'N, sem intervenção', P:'P, prompt anti_slop', G:'G, gate', PG:'PG, prompt e gate'};
+const TAU = {minimax:0.7764, opus:0.7923};
+const MODEL = {minimax:'MiniMax M2.7', opus:'Opus 4.7'};
+const fmt = (x, d=3) => x.toFixed(d).replace('.', ',');
+Chart.defaults.color = css('--muted'); Chart.defaults.borderColor = css('--line');
+Chart.defaults.font.family = css('--sans'); Chart.defaults.font.size = 13;
+Chart.defaults.animation = false;
+const tip = {backgroundColor: css('--ink'), titleColor: css('--bg'), bodyColor: css('--bg'), padding: 10, displayColors: false};
 
-function series(exp, key){ // key = "arm" ou "problem/arm"
-  const d = DATA[exp]; const src = key ? d.by_problem : d.by_arm;
-  return d.arms.map(a => {
-    const pts = (src[key ? key + '/' + a : a] || []);
-    return {label: LABEL[a], borderColor: COLORS[a], backgroundColor: COLORS[a], borderWidth: 2, pointRadius: 2.5, tension: .2,
-            data: pts.map(p => ({x: p.idx, y: p.erosion, n: p.n, solved: p.solved}))};
-  });
+function series(exp, problem){
+  const d = DATA[exp]; const src = problem ? d.by_problem : d.by_arm;
+  return d.arms.map(a => ({label: LABEL[a], arm: a, borderColor: COLORS[a], backgroundColor: COLORS[a], borderWidth: 2,
+    pointRadius: problem ? 2 : 4, pointHoverRadius: 6, tension: .15,
+    data: (src[problem ? problem + '/' + a : a] || []).map(p => ({x: p.idx, y: p.erosion, n: p.n, solved: p.solved}))}));
 }
-const opts = (small) => ({responsive:true, maintainAspectRatio:false, parsing:false, animation:false,
-  scales:{x:{type:'linear', title:{display:!small, text:'checkpoint'}, ticks:{stepSize:1}, min:1, max:8},
-          y:{min:0, max:1, title:{display:!small, text:'erosão média'}, ticks:{display:!small}}},
-  plugins:{legend:{display:!small, position:'bottom'},
-    tooltip:{enabled:!small, callbacks:{label:c=>`${c.dataset.label}: ${c.parsed.y.toFixed(3)} (n=${c.raw.n}, resolvidos ${(c.raw.solved*100).toFixed(0)}%)`,
-                                        title:i=>'checkpoint '+i[0].parsed.x}}}});
+const lineOpts = small => ({responsive:true, maintainAspectRatio:false, parsing:false, interaction:{mode:'nearest', intersect:false},
+  scales:{x:{type:'linear', min:1, max:8, ticks:{stepSize:1}, title:{display:!small, text:'checkpoint'}, grid:{display:false}},
+          y:{min:0, max:1, ticks:{display:!small, stepSize:.2}, title:{display:!small, text:'erosão média'}}},
+  plugins:{legend:{display:false}, tooltip:{...tip, enabled:!small,
+    callbacks:{title:i => 'checkpoint ' + i[0].parsed.x,
+               label:c => `${c.dataset.label}: ${fmt(c.parsed.y)} (n = ${c.raw.n}, ${Math.round(c.raw.solved*100)}% resolvidos)`}}}});
 
-let mainChart, probCharts = [];
+// figura 1: curvas, legenda clicável
+let mainChart;
 function renderMain(exp){
-  document.getElementById('res-title').textContent = 'Erosão média por checkpoint · ' + TITLE[exp];
-  document.getElementById('res-minimax').hidden = exp !== 'minimax';
-  document.getElementById('res-opus').hidden = exp !== 'opus';
   if (mainChart) mainChart.destroy();
-  mainChart = new Chart(document.getElementById('main-chart'), {type:'line', data:{datasets:series(exp)}, options:opts(false)});
-  const t = DATA[exp].totals; const cost = exp === 'opus' ? 'custo-equiv. US$' : 'custo US$';
-  document.getElementById('totals').innerHTML =
-    `<tr><th>Braço</th><th class="num">Checkpoints</th><th class="num">Erosão média</th><th class="num">Resolvidos</th><th class="num">${cost}</th><th class="num">LOC médio</th><th class="num">Stops</th><th class="num">Bloqueios</th><th class="num">Limite de turnos</th></tr>` +
-    DATA[exp].arms.map(a => { const r = t[a]; return `<tr><td><span class="sw" style="background:${COLORS[a]}"></span><b>${a}</b></td><td class="num">${r.ckpts}</td><td class="num">${r.erosion.toFixed(3)}</td><td class="num">${(r.solved*100).toFixed(1)}%</td><td class="num">${r.cost.toFixed(2)}</td><td class="num">${Math.round(r.loc)}</td><td class="num">${a.includes('G') ? r.stops : '·'}</td><td class="num">${a.includes('G') ? r.blocks : '·'}</td><td class="num">${r.max_turns}</td></tr>`; }).join('');
+  mainChart = new Chart(document.getElementById('main-chart'), {type:'line', data:{datasets:series(exp)}, options:lineOpts(false)});
+  const lg = document.getElementById('main-legend'); lg.innerHTML = '';
+  DATA[exp].arms.forEach((a, i) => {
+    const b = document.createElement('button'); b.innerHTML = `<span class="arm ${a}"></span>${LABEL[a]}`;
+    b.setAttribute('aria-pressed', 'true');
+    b.onclick = () => { const vis = mainChart.isDatasetVisible(i); mainChart.setDatasetVisibility(i, !vis); mainChart.update();
+      b.classList.toggle('off', vis); b.setAttribute('aria-pressed', String(!vis)); };
+    lg.appendChild(b);
+  });
+  const n = Object.values(DATA[exp].totals).reduce((s, t) => s + t.ckpts, 0);
+  document.getElementById('main-cap').textContent = `Erosão média por checkpoint em cada condição, ${MODEL[exp]}, ${n} checkpoints. Média dos 12 problemas × 3 repetições; os problemas têm de 4 a 8 checkpoints, então os últimos pontos somam menos observações. Clique na legenda para esconder uma condição; passe o mouse para ver n e correção.`;
 }
+
+// tabelas de totais
+function totals(exp){
+  const t = DATA[exp].totals, custo = exp === 'opus' ? 'Custo-equivalente (US$)' : 'Custo (US$)';
+  document.getElementById('tot-' + exp).innerHTML =
+    `<thead><tr><th>Condição</th><th class="n">Checkpoints</th><th class="n">Erosão média</th><th class="n">Resolvidos</th><th class="n">${custo}</th><th class="n">Stops</th><th class="n">Bloqueios</th><th class="n">Esgotaram 100 turnos</th></tr></thead><tbody>` +
+    DATA[exp].arms.map(a => { const r = t[a]; const g = a.includes('G');
+      return `<tr><td><span class="arm ${a}"></span><strong>${a}</strong></td><td class="n">${r.ckpts}</td><td class="n">${fmt(r.erosion)}</td><td class="n">${fmt(r.solved*100,1)}%</td><td class="n">${fmt(r.cost,2)}</td><td class="n">${g ? r.stops : ''}</td><td class="n">${g ? r.blocks : ''}</td><td class="n">${r.max_turns}</td></tr>`; }).join('') + '</tbody>';
+}
+
+// figura 2: antes/depois do bloqueio
+let blkChart;
+function renderBlocks(exp){
+  if (blkChart) blkChart.destroy();
+  const rows = DATA[exp].blocks;
+  const ds = rows.map(r => ({label: `${r.problem}, checkpoint ${r.idx}`, arm: r.arm, borderColor: COLORS[r.arm], backgroundColor: COLORS[r.arm],
+    borderWidth: 1.5, pointRadius: 4, pointHoverRadius: 7, data: [{x:0, y:r.before}, {x:1, y:r.after}]}));
+  ds.push({label:'τ', data:[{x:-0.2, y:TAU[exp]}, {x:1.2, y:TAU[exp]}], borderColor: css('--muted'), borderDash:[5,5], borderWidth:1, pointRadius:0, pointHoverRadius:0});
+  blkChart = new Chart(document.getElementById('blk-chart'), {type:'line', data:{datasets:ds}, options:{
+    responsive:true, maintainAspectRatio:false, parsing:false, interaction:{mode:'nearest', intersect:true},
+    scales:{x:{type:'linear', min:-0.2, max:1.2, ticks:{stepSize:1, callback: v => v === 0 ? 'no bloqueio' : v === 1 ? 'último Stop do checkpoint' : ''}, grid:{display:false}},
+            y:{min:0, max:1, ticks:{stepSize:.2}, title:{display:true, text:'erosão medida pelo gate'}}},
+    plugins:{legend:{display:false}, tooltip:{...tip, filter: i => i.dataset.label !== 'τ',
+      callbacks:{title: i => i[0].dataset.label, label: c => (c.parsed.x === 0 ? 'no bloqueio: ' : 'último Stop: ') + fmt(c.parsed.y)}}}}});
+  const fell = rows.filter(r => r.after < r.before).length, zero = rows.filter(r => r.after === 0).length;
+  document.getElementById('blk-cap').textContent = `Cada linha é um checkpoint bloqueado: a erosão que o gate mediu no primeiro Stop, quando bloqueou, e a que mediu no último Stop do mesmo checkpoint. ${MODEL[exp]}, τ = ${fmt(TAU[exp], 2)} (linha tracejada). A erosão caiu em ${fell} de ${rows.length}; chegou a zero em ${zero}.` + (exp === 'minimax' ? ' Linhas horizontais: o agente esgotou os turnos sem um Stop seguinte.' : '');
+}
+
+// figura 3: distribuição acumulada e explorador de τ
+let tauChart, tauExp = 'opus';
+const ecdf = v => { const s = [...v].sort((a, b) => a - b), n = s.length; return s.map((x, i) => ({x, y: (i + 1) / n})); };
+function renderTau(exp){
+  tauExp = exp; const d = DATA[exp]; const t = parseFloat(document.getElementById('tau-range').value);
+  if (tauChart) tauChart.destroy();
+  const ds = d.arms.map(a => ({label: LABEL[a], borderColor: COLORS[a], backgroundColor: COLORS[a], borderWidth: 2, pointRadius: 0, pointHoverRadius: 0, stepped: true, data: ecdf(d.dist[a])}));
+  ds.push({label:'τ', data:[{x:t, y:0}, {x:t, y:1}], borderColor: css('--muted'), borderDash:[5,5], borderWidth:1, pointRadius:0});
+  tauChart = new Chart(document.getElementById('tau-chart'), {type:'line', data:{datasets:ds}, options:{
+    responsive:true, maintainAspectRatio:false, parsing:false, interaction:{mode:'index', intersect:false},
+    scales:{x:{type:'linear', min:0, max:1, ticks:{stepSize:.2}, title:{display:true, text:'erosão do checkpoint'}, grid:{display:false}},
+            y:{min:0, max:1, ticks:{stepSize:.25, callback: v => Math.round(v*100) + '%'}, title:{display:true, text:'fração dos checkpoints com erosão até x'}}},
+    plugins:{legend:{display:true, position:'bottom', labels:{boxWidth:10, boxHeight:10, usePointStyle:true, pointStyle:'circle', filter: i => i.text !== 'τ'}},
+             tooltip:{...tip, filter: i => i.dataset.label !== 'τ', callbacks:{title: i => 'erosão ≤ ' + fmt(i[0].parsed.x, 2), label: c => `${c.dataset.label}: ${Math.round(c.parsed.y*100)}%`}}}}});
+  updateTau();
+}
+function updateTau(){
+  const t = parseFloat(document.getElementById('tau-range').value); const d = DATA[tauExp];
+  document.getElementById('tau-out').textContent = fmt(t, 2);
+  if (tauChart){ tauChart.data.datasets.at(-1).data = [{x:t, y:0}, {x:t, y:1}]; tauChart.update(); }
+  document.getElementById('tau-bars').innerHTML = d.arms.map(a => { const v = d.dist[a]; const p = v.filter(x => x > t).length / v.length;
+    return `<li><span><span class="arm ${a}"></span>${a}</span><span class="track"><span class="fill" style="width:${(p*100).toFixed(1)}%;background:${COLORS[a]}"></span></span><span class="pct">${Math.round(p*100)}%</span></li>`; }).join('');
+}
+document.getElementById('tau-range').addEventListener('input', updateTau);
+
+// figura 4: pequenos múltiplos
+let probCharts = [];
 function renderProblems(exp){
   probCharts.forEach(c => c.destroy()); probCharts = [];
   const grid = document.getElementById('prob-grid'); grid.innerHTML = '';
   for (const p of DATA[exp].problems){
     const cell = document.createElement('div'); cell.className = 'cell';
-    cell.innerHTML = `<div class="t">${p}</div><div style="height:150px"><canvas></canvas></div>`;
+    cell.innerHTML = `<p class="t">${p}</p><div class="plot"><canvas aria-label="${p}"></canvas></div>`;
     grid.appendChild(cell);
-    probCharts.push(new Chart(cell.querySelector('canvas'), {type:'line', data:{datasets:series(exp, p)}, options:opts(true)}));
+    probCharts.push(new Chart(cell.querySelector('canvas'), {type:'line', data:{datasets:series(exp, p)}, options:lineOpts(true)}));
   }
 }
-for (const [id, fn] of [['exp-tabs', renderMain], ['prob-tabs', renderProblems]]) {
+
+// abas
+for (const [id, fn] of [['exp-tabs', renderMain], ['blk-tabs', renderBlocks], ['tau-tabs', e => { document.getElementById('tau-range').value = TAU[e].toFixed(2); renderTau(e); }], ['prob-tabs', renderProblems]]) {
   const tabs = document.getElementById(id);
   tabs.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return;
     tabs.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); fn(b.dataset.exp); });
 }
-renderMain('minimax'); renderProblems('minimax');
+renderMain('minimax'); totals('minimax'); totals('opus'); renderBlocks('minimax'); renderTau('opus'); renderProblems('minimax');
+
+// seção atual na barra
+const links = [...document.querySelectorAll('.bar a')];
+const obs = new IntersectionObserver(es => { es.forEach(e => { if (e.isIntersecting) links.forEach(l => l.classList.toggle('on', l.getAttribute('href') === '#' + e.target.id)); }); }, {rootMargin:'-20% 0px -70% 0px'});
+links.forEach(l => { const s = document.querySelector(l.getAttribute('href')); if (s) obs.observe(s); });
 </script>
 </body>
 </html>
